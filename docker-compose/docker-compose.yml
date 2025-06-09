@@ -36,7 +36,7 @@ services:
     environment:
         ETHEREUM_JSONRPC_HTTP_URL: http://159.89.8.129:8545
         ETHEREUM_JSONRPC_TRACE_URL: http://159.89.8.129:8545
-        ETHEREUM_JSONRPC_WS_URL: ws://159.89.8.129:8545
+        ETHEREUM_JSONRPC_WS_URL: ws://159.89.8.129:8546
         CHAIN_ID: '55681'
 
   nft_media_handler:
