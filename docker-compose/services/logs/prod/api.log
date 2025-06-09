@@ -1,0 +1,9 @@
+2025-06-08T11:57:52.624 application=api [debug] Current global API rate limit 50 reqs/sec
+2025-06-08T11:57:52.624 application=api [debug] Current API rate limit by key 50 reqs/sec
+2025-06-08T11:57:52.624 application=api [debug] Current API rate limit by IP 3000 reqs/sec
+2025-06-09T15:09:44.458 application=api [debug] Current global API rate limit 50 reqs/sec
+2025-06-09T15:09:44.458 application=api [debug] Current API rate limit by key 50 reqs/sec
+2025-06-09T15:09:44.458 application=api [debug] Current API rate limit by IP 3000 reqs/sec
+2025-06-09T15:11:40.739 application=api [debug] Current global API rate limit 50 reqs/sec
+2025-06-09T15:11:40.739 application=api [debug] Current API rate limit by key 50 reqs/sec
+2025-06-09T15:11:40.739 application=api [debug] Current API rate limit by IP 3000 reqs/sec
