@@ -1,17 +1,67 @@
 map $http_upgrade $connection_upgrade {
-
   default upgrade;
   ''      close;
 }
 
+
 server {
-    listen       80;
-    server_name  localhost;
+    listen 80;
+    server_name blockscout.metastate.is;
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name blockscout.metastate.is;
+
+    ssl_certificate     /etc/nginx/certs/blockscout.metastate.is/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/blockscout.metastate.is/privkey.pem;
     proxy_http_version 1.1;
 
+    ############################################################
+    # 1. STATISTICS SERVICE (stats)
+    ############################################################
+
+    # v1 dashboard counters
+    location ^~ /api/v1/pages/ {
+        proxy_pass http://stats:8050/api/v1/pages/;
+        proxy_set_header Host "$host";
+        proxy_set_header X-Real-IP "$remote_addr";
+        proxy_set_header X-Forwarded-For "$proxy_add_x_forwarded_for";
+        proxy_set_header X-Forwarded-Proto "$scheme";
+        proxy_set_header Upgrade "$http_upgrade";
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # v1 charts (all graphs)
+    location ^~ /api/v1/charts/ {
+        proxy_pass http://stats:8050/api/v1/charts/;
+        proxy_set_header Host "$host";
+        proxy_set_header X-Real-IP "$remote_addr";
+        proxy_set_header X-Forwarded-For "$proxy_add_x_forwarded_for";
+        proxy_set_header X-Forwarded-Proto "$scheme";
+        proxy_set_header Upgrade "$http_upgrade";
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # optional: stats readiness / liveness
+    location ^~ /api/v1/health {
+        proxy_pass http://stats:8050/api/v1/health;
+        proxy_set_header Host "$host";
+        proxy_set_header X-Real-IP "$remote_addr";
+        proxy_set_header X-Forwarded-For "$proxy_add_x_forwarded_for";
+        proxy_set_header X-Forwarded-Proto "$scheme";
+    }
+
+    ############################################################
+    # 2. BLOCKSCOUT BACKEND (core + socket)
+    ############################################################
+    # regex-location — оставляем после приоритетных ^~ правил
     location ~ ^/(api(?!-docs$)|socket|sitemap.xml|auth/auth0|auth/auth0/callback|auth/logout) {
         proxy_pass            ${BACK_PROXY_PASS};
-        proxy_http_version    1.1;
         proxy_set_header      Host "$host";
         proxy_set_header      X-Real-IP "$remote_addr";
         proxy_set_header      X-Forwarded-For "$proxy_add_x_forwarded_for";
@@ -20,9 +70,45 @@ server {
         proxy_set_header      Connection $connection_upgrade;
         proxy_cache_bypass    $http_upgrade;
     }
+
+    ############################################################
+    # 3. STATS UI (stand-alone swagger)
+    ############################################################
+    location /stats/ {
+        proxy_pass http://stats:8050/;
+        proxy_set_header Host "$host";
+        proxy_set_header X-Real-IP "$remote_addr";
+        proxy_set_header X-Forwarded-For "$proxy_add_x_forwarded_for";
+        proxy_set_header X-Forwarded-Proto "$scheme";
+        proxy_set_header Upgrade "$http_upgrade";
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    ############################################################
+    # 4. VISUALIZER SERVICE
+    ############################################################
+    location /visualize/ {
+        proxy_pass http://visualizer:8050/;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_connect_timeout 30m;
+        proxy_read_timeout 30m;
+        proxy_send_timeout 30m;
+        proxy_set_header Host "$host";
+        proxy_set_header X-Real-IP "$remote_addr";
+        proxy_set_header X-Forwarded-For "$proxy_add_x_forwarded_for";
+        proxy_set_header X-Forwarded-Proto "$scheme";
+        proxy_set_header Upgrade "$http_upgrade";
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    ############################################################
+    # 5. FRONTEND (Next.js)
+    ############################################################
     location / {
         proxy_pass            ${FRONT_PROXY_PASS};
-        proxy_http_version    1.1;
         proxy_set_header      Host "$host";
         proxy_set_header      X-Real-IP "$remote_addr";
         proxy_set_header      X-Forwarded-For "$proxy_add_x_forwarded_for";
@@ -32,19 +118,23 @@ server {
         proxy_cache_bypass    $http_upgrade;
     }
 }
+
+#################################################################
+# 6. DEV-ONLY CORS ENDPOINTS (8080/8081) — остаются без изменений
+#################################################################
+
 server {
     listen       8080;
     server_name  localhost;
     proxy_http_version 1.1;
     proxy_hide_header Access-Control-Allow-Origin;
     proxy_hide_header Access-Control-Allow-Methods;
-    add_header 'Access-Control-Allow-Origin' 'http://localhost' always;
+    add_header 'Access-Control-Allow-Origin' '*' always;
     add_header 'Access-Control-Allow-Credentials' 'true' always;
     add_header 'Access-Control-Allow-Methods' 'PUT, GET, POST, OPTIONS, DELETE, PATCH' always;
 
     location / {
         proxy_pass            http://stats:8050/;
-        proxy_http_version    1.1;
         proxy_set_header      Host "$host";
         proxy_set_header      X-Real-IP "$remote_addr";
         proxy_set_header      X-Forwarded-For "$proxy_add_x_forwarded_for";
@@ -54,20 +144,20 @@ server {
         proxy_cache_bypass    $http_upgrade;
     }
 }
+
 server {
     listen       8081;
     server_name  localhost;
     proxy_http_version 1.1;
     proxy_hide_header Access-Control-Allow-Origin;
     proxy_hide_header Access-Control-Allow-Methods;
-    add_header 'Access-Control-Allow-Origin' 'http://localhost' always;
+    add_header 'Access-Control-Allow-Origin' '*' always;
     add_header 'Access-Control-Allow-Credentials' 'true' always;
     add_header 'Access-Control-Allow-Methods' 'PUT, GET, POST, OPTIONS, DELETE, PATCH' always;
     add_header 'Access-Control-Allow-Headers' 'DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,x-csrf-token' always;
 
     location / {
         proxy_pass            http://visualizer:8050/;
-        proxy_http_version    1.1;
         proxy_buffering       off;
         proxy_set_header      Host "$host";
         proxy_set_header      X-Real-IP "$remote_addr";
@@ -80,7 +170,7 @@ server {
         proxy_set_header      Connection $connection_upgrade;
         proxy_cache_bypass    $http_upgrade;
         if ($request_method = 'OPTIONS') {
-            add_header 'Access-Control-Allow-Origin' 'http://localhost' always;
+            add_header 'Access-Control-Allow-Origin' '*' always;
             add_header 'Access-Control-Allow-Credentials' 'true' always;
             add_header 'Access-Control-Allow-Methods' 'PUT, GET, POST, OPTIONS, DELETE, PATCH' always;
             add_header 'Access-Control-Allow-Headers' 'DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,x-csrf-token' always;
@@ -89,5 +179,38 @@ server {
             add_header 'Content-Length' 0;
             return 204;
         }
+    }
+}
+
+#################################################################
+# 7. RPC passthrough — неизменный
+#################################################################
+server {
+    listen 80;
+    server_name rpc-node.metastate.is;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name rpc-node.metastate.is;
+
+    ssl_certificate     /etc/nginx/certs/rpc-node.metastate.is/fullchain.pem; 
+    ssl_certificate_key /etc/nginx/certs/rpc-node.metastate.is/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://159.89.8.129:8545;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+
+        proxy_set_header Connection "";
     }
 }
